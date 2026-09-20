@@ -43,6 +43,10 @@ export function registerHarTools(mcp: McpServer) {
           }))
 
           return {
+            // 표준 HAR 필드가 아닌 커스텀 확장(HAR 스펙이 명시적으로 허용하는 `_` 접두사) —
+            // 표준 HAR 파서(Burp/Caido)는 무시하고, 우리 쪽 오케스트레이터는 이 값으로
+            // repeater_send/get_request를 다시 호출해 Tier1 재전송을 수행한다.
+            _requestId: full.requestId,
             startedDateTime,
             time: timeMs,
             request: {

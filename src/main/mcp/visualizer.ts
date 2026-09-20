@@ -557,8 +557,15 @@ export const VISUALIZER_INIT_SCRIPT = `
     hud.appendChild(row)
     s.appendChild(hud)
     pending.push(hud)
-    // Cap the stack — evict the oldest (top) cards past the limit.
-    while (s.children.length > MAX_CARDS) {
+    // Cap the stack — evict the oldest (top) card past the limit. This call
+    // adds exactly one card, so at most one is ever over the cap here — a
+    // plain if fully drains it. It used to be a while loop, but removeCard
+    // only marks the card as out and defers the real DOM removal 320ms later
+    // via setTimeout, so children.length never actually shrinks inside a
+    // synchronous loop -- that made the 6th non-browser tool call in any
+    // session spin forever and freeze the page JS thread (found 2026-09-19,
+    // see docs/issue/09-tier1-engine_rever-browser-cdp-session-stability.md).
+    if (s.children.length > MAX_CARDS) {
       const top = s.firstChild
       const i = pending.indexOf(top)
       if (i >= 0) pending.splice(i, 1)

@@ -105,6 +105,14 @@ export function buildRequestSpec(
   return { url, method, headers, body }
 }
 
+// 페이지 안에서 실행되는 fetch()에 원래 타임아웃이 전혀 없었다 — 타겟이 응답을
+// 끝내지 않으면(NestJS가 500을 로그만 찍고 응답을 안 닫는 버그 등, 실측 확인됨:
+// docs/issue/09-tier1-engine_rever-browser-cdp-session-stability.md) 그 fetch()가 영원히 안
+// 풀려서 브라우저의 오리진당 커넥션 슬롯을 하나씩 영구히 갉아먹었다. 이 상수를
+// Runtime.evaluate 자체의 CDP 레벨 타임아웃(아래 30_000)보다 짧게 잡아야
+// AbortController가 먼저 발동해서 슬롯을 확실히 반납한다.
+const FETCH_TIMEOUT_MS = 15_000
+
 export async function repeaterSendRaw(spec: RepeaterRequestSpec): Promise<RepeaterResponse> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active webview attached')
@@ -112,7 +120,8 @@ export async function repeaterSendRaw(spec: RepeaterRequestSpec): Promise<Repeat
   const cleanedHeaders = dropForbidden(spec.headers)
   const expression = buildEvalExpression(
     { ...spec, headers: cleanedHeaders },
-    MAX_BODY_BYTES
+    MAX_BODY_BYTES,
+    FETCH_TIMEOUT_MS
   )
 
   const result = (await target.dbg.sendCommand('Runtime.evaluate', {
@@ -149,21 +158,27 @@ export async function repeaterSend(
   return repeaterSendRaw(buildRequestSpec(requestId, mods))
 }
 
-function buildEvalExpression(spec: RepeaterRequestSpec, maxBytes: number): string {
+function buildEvalExpression(spec: RepeaterRequestSpec, maxBytes: number, timeoutMs: number): string {
   const hasBody = spec.body !== undefined && spec.method !== 'GET' && spec.method !== 'HEAD'
   return `
 (async () => {
   const t0 = performance.now()
+  // AbortController 없이는 타겟이 응답을 안 끝낼 때 이 fetch()가 영원히 안 풀려
+  // 브라우저의 오리진당 커넥션 슬롯을 하나 영구히 점유한다(실측 확인된 버그).
+  const __revAc = new AbortController()
+  const __revTimer = setTimeout(() => __revAc.abort(), ${timeoutMs})
   try {
     const init = {
       method: ${JSON.stringify(spec.method)},
       headers: ${JSON.stringify(spec.headers)},
       credentials: 'include',
       redirect: 'follow',
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: __revAc.signal
     }
     ${hasBody ? `init.body = ${JSON.stringify(spec.body)}` : ''}
     const res = await fetch(${JSON.stringify(spec.url)}, init)
+    clearTimeout(__revTimer)
     const buf = await res.arrayBuffer()
     const bytes = new Uint8Array(buf)
     const total = bytes.length
@@ -194,6 +209,8 @@ function buildEvalExpression(spec: RepeaterRequestSpec, maxBytes: number): strin
       timeMs: Math.round(performance.now() - t0)
     }
   } catch (e) {
+    clearTimeout(__revTimer)
+    const isAbort = e && (e.name === 'AbortError')
     return {
       status: 0,
       statusText: '',
@@ -202,7 +219,9 @@ function buildEvalExpression(spec: RepeaterRequestSpec, maxBytes: number): strin
       bodyTruncated: false,
       bodyByteLength: 0,
       timeMs: Math.round(performance.now() - t0),
-      error: (e && e.message) ? e.message : String(e)
+      error: isAbort
+        ? 'repeater: fetch aborted after ${timeoutMs}ms with no response (target likely hung)'
+        : ((e && e.message) ? e.message : String(e))
     }
   }
 })()
