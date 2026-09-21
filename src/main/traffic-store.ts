@@ -206,6 +206,16 @@ export interface ListFilter {
   host?: string
   methodOrType?: string
   since?: number
+  // 2026-09-21 사용자 리뷰 항목 4: har_export가 한 번에 너무 많은 entry를 실어 보내면
+  // 클라이언트 쪽 SSE 파서(1MB 이벤트 크기 제한, httpx2 DEFAULT_MAX_EVENT_SIZE_BYTES)가
+  // 스트림을 끊어버린다(rever-browser 쪽 버그가 아니라 클라이언트 쪽 제약으로 확인됨).
+  // 이 상한 아래로 안전하게 여러 페이지에 나눠 받으려면 "이 시각보다 오래된 것만"
+  // 필터가 필요한데, since(하한)만으로는 "다음 페이지(더 오래된 것)"를 못 구한다.
+  // inclusive(<=)다 — 같은 ms에 여러 entry가 몰려 있을 때 페이지 경계에서 그중 일부만
+  // 앞 페이지에 실렸다면(그 페이지의 limit이 먼저 찼음) exclusive였다면 나머지 형제
+  // entry가 조용히 사라진다. inclusive로 커서 entry를 다음 페이지에서 다시 포함시키고,
+  // 호출부가 request_id로 중복 제거하게 한다(orchestrator의 fetch_raw_requests_paged 참고).
+  before?: number
   limit?: number
 }
 
@@ -226,6 +236,7 @@ export function listRequests(filter: ListFilter = {}): StoredRequest[] {
       }
     }
     if (filter.since && e.startedAt < filter.since) continue
+    if (filter.before !== undefined && e.startedAt > filter.before) continue
     result.push(e)
   }
   return result

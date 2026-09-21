@@ -22,12 +22,21 @@ export function registerHarTools(mcp: McpServer) {
         includeBodies: z
           .boolean()
           .optional()
-          .describe('Include response bodies (default true, may be large)')
+          .describe('Include response bodies (default true, may be large)'),
+        before: z
+          .number()
+          .optional()
+          .describe(
+            'Only include entries started strictly before this epoch-ms timestamp. ' +
+              '2026-09-21: lets a client page through large traffic sets in safe-sized chunks ' +
+              '(avoids MCP SSE client event-size limits) by re-calling with the oldest ' +
+              "entry's startedAt from the previous page."
+          )
       }
     },
-    async ({ host, limit, includeBodies = true }) => {
+    async ({ host, limit, includeBodies = true, before }) => {
       try {
-        const entries = listRequests({ host, limit: limit ?? 500 })
+        const entries = listRequests({ host, limit: limit ?? 500, before })
         const harEntries = entries.map((r) => {
           const full = getRequest(r.requestId) ?? r
           const startedDateTime = new Date(full.startedAt).toISOString()

@@ -68,6 +68,38 @@ describe('listRequests', () => {
   it('filters by since timestamp', () => {
     expect(listRequests({ since: 250 }).map((r) => r.requestId)).toEqual(['r3'])
   })
+
+  // 2026-09-21 사용자 리뷰 항목 4: before(상한)로 "다음 페이지(더 오래된 것)"를 가져올 수
+  // 있어야 안전한 크기로 나눠 받는 페이지네이션이 가능하다. inclusive(<=)로 바꿔서
+  // 같은 ms 경계에 걸린 형제 entry가 조용히 사라지지 않게 한다(호출부가 중복 제거).
+  it('filters by before timestamp (inclusive upper bound)', () => {
+    expect(listRequests({ before: 300 }).map((r) => r.requestId)).toEqual(['r3', 'r2', 'r1'])
+  })
+
+  it('before excludes strictly newer entries only', () => {
+    expect(listRequests({ before: 299 }).map((r) => r.requestId)).toEqual(['r2', 'r1'])
+  })
+
+  it('before and since together select a window (both inclusive on their own side)', () => {
+    expect(listRequests({ since: 150, before: 299 }).map((r) => r.requestId)).toEqual(['r2'])
+  })
+
+  it('before at the oldest entry still includes it (cursor re-fetch case)', () => {
+    // 페이지네이션이 이전 페이지의 가장 오래된 entry의 startedAt을 커서로 재사용하는
+    // 상황을 흉내낸다 — inclusive라 그 entry 자신이 다시 포함돼야 한다(호출부 중복 제거 전제).
+    expect(listRequests({ before: 100 }).map((r) => r.requestId)).toEqual(['r1'])
+  })
+
+  it('before older than every entry returns empty', () => {
+    expect(listRequests({ before: 50 }).map((r) => r.requestId)).toEqual([])
+  })
+
+  it('before is inclusive across multiple entries sharing the exact same ms (boundary case)', () => {
+    upsertRequest({ requestId: 'r4', url: 'https://c.com/4', host: 'c.com', method: 'GET', resourceType: 'XHR', startedAt: 300 })
+    // r3와 r4가 같은 ms(300)를 공유 — limit이 그 경계에서 잘려도(예: 이전 페이지가
+    // limit=1로 r3만 가져갔다면) before:300(inclusive)로 다시 조회하면 r4도 나와야 한다.
+    expect(listRequests({ before: 300 }).map((r) => r.requestId).sort()).toEqual(['r1', 'r2', 'r3', 'r4'])
+  })
 })
 
 describe('response body cap', () => {
