@@ -47,6 +47,9 @@ export function registerHarTools(mcp: McpServer) {
             // 표준 HAR 파서(Burp/Caido)는 무시하고, 우리 쪽 오케스트레이터는 이 값으로
             // repeater_send/get_request를 다시 호출해 Tier1 재전송을 수행한다.
             _requestId: full.requestId,
+            // 표준 HAR 필드가 아닌 커스텀 확장 — 오케스트레이터가 정적 리소스(스크립트/스타일/폰트 등)를
+            // 스캔 대상에서 제외하는 데 쓴다. traffic-store는 이미 이 값을 추적하고 있었다.
+            _resourceType: full.resourceType,
             startedDateTime,
             time: timeMs,
             request: {
