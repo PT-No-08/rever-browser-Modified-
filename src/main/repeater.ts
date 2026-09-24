@@ -62,19 +62,28 @@ export function restoreMarker(spec: RepeaterRequestSpec): RepeaterRequestSpec {
   }
 }
 
-export function buildRequestSpec(
-  requestId: string,
-  mods: RepeaterModifications | undefined
-): RepeaterRequestSpec {
+// DAST-6: 캡처된 요청을 RepeaterRequestSpec으로 변환. traffic-store는
+// MAX_ENTRIES 링 버퍼라 오래된 requestId는 축출된다 — 호출자가 spec을 미리
+// 확보해 두면 저장소 생존 여부와 무관하게 재전송할 수 있다(repeater_send_raw).
+export function storedSpec(requestId: string): RepeaterRequestSpec {
   const stored = getRequest(requestId)
   if (!stored) throw new Error(`unknown requestId: ${requestId}`)
+  return {
+    url: stored.url,
+    method: (stored.method ?? 'GET').toUpperCase(),
+    headers: stored.requestHeaders ? dropForbidden(stored.requestHeaders) : {},
+    body: stored.requestPostData
+  }
+}
 
-  const url = mods?.url ?? stored.url
-  const method = (mods?.method ?? stored.method ?? 'GET').toUpperCase()
+export function applyModifications(
+  spec: RepeaterRequestSpec,
+  mods: RepeaterModifications | undefined
+): RepeaterRequestSpec {
+  const url = mods?.url ?? spec.url
+  const method = (mods?.method ?? spec.method ?? 'GET').toUpperCase()
 
-  const headers: Record<string, string> = stored.requestHeaders
-    ? dropForbidden(stored.requestHeaders)
-    : {}
+  const headers: Record<string, string> = { ...(spec.headers ?? {}) }
 
   if (mods?.removeHeaders) {
     for (const name of mods.removeHeaders) {
@@ -95,14 +104,19 @@ export function buildRequestSpec(
     }
   }
 
-  let body: string | undefined
+  let body = spec.body
   if (mods && 'body' in mods) {
     body = mods.body == null ? undefined : mods.body
-  } else {
-    body = stored.requestPostData
   }
 
   return { url, method, headers, body }
+}
+
+export function buildRequestSpec(
+  requestId: string,
+  mods: RepeaterModifications | undefined
+): RepeaterRequestSpec {
+  return applyModifications(storedSpec(requestId), mods)
 }
 
 // 페이지 안에서 실행되는 fetch()에 원래 타임아웃이 전혀 없었다 — 타겟이 응답을
