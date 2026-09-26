@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-import { listRequests, getRequest } from '../../traffic-store'
+import { listRequests, getRequest, getEvictedCount } from '../../traffic-store'
 import { toHeaders } from '../har-build'
 import { ok, err, errorMessage } from '../utils'
 
@@ -142,7 +142,10 @@ export function registerHarTools(mcp: McpServer) {
             version: '1.2',
             creator: { name: 'rever-browser', version: '0.1.0' },
             entries: harEntries,
-            ...(skippedEntries > 0 ? { _skippedEntries: skippedEntries } : {})
+            ...(skippedEntries > 0 ? { _skippedEntries: skippedEntries } : {}),
+            // 링 버퍼 용량을 넘겨 영구 삭제된 엔트리 수 — 이 export에 없는 과거 요청이
+            // 있을 수 있음을 소비자가 알 수 있도록 조용한 유실을 표면화한다.
+            ...(getEvictedCount() > 0 ? { _evictedEntries: getEvictedCount() } : {})
           }
         }
 

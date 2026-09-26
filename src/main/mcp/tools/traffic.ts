@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getRequest, listRequests, type StoredRequest } from '../../traffic-store'
-import { ok, err } from '../utils'
+import { ok, err, unknownRequestId } from '../utils'
 
 function toSummary(e: StoredRequest) {
   return {
@@ -54,7 +54,7 @@ export function registerTrafficTools(mcp: McpServer) {
     },
     async ({ requestId }) => {
       const entry = getRequest(requestId)
-      if (!entry) return err(`unknown requestId: ${requestId}`)
+      if (!entry) return err(unknownRequestId(requestId))
       return ok(JSON.stringify(entry, null, 2))
     }
   )
@@ -70,7 +70,7 @@ export function registerTrafficTools(mcp: McpServer) {
     },
     async ({ requestId }) => {
       const entry = getRequest(requestId)
-      if (!entry) return err(`unknown requestId: ${requestId}`)
+      if (!entry) return err(unknownRequestId(requestId))
       const stack = (entry.initiatorStack ?? []).map((f) => ({
         functionName: f.functionName || '(anonymous)',
         url: f.url,

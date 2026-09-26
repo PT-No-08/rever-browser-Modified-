@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getActiveTarget } from '../../chrome-cdp'
 import { listRequests, getRequest } from '../../traffic-store'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 const AUTH_HEADERS = ['authorization', 'cookie', 'x-csrf-token', 'x-api-key']
 
@@ -100,7 +100,7 @@ export function registerAuthTools(mcp: McpServer) {
     },
     async ({ requestId, library = 'requests' }) => {
       const entry = getRequest(requestId)
-      if (!entry) return err(`unknown requestId: ${requestId}`)
+      if (!entry) return err(unknownRequestId(requestId))
 
       const lib = library === 'httpx' ? 'httpx' : 'requests'
       const clientClass = lib === 'httpx' ? 'httpx.Client' : 'requests.Session'

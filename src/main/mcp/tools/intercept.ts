@@ -12,7 +12,7 @@ import {
   type InterceptRule
 } from '../../chrome-cdp'
 import { getRequest } from '../../traffic-store'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 export function registerInterceptTools(mcp: McpServer) {
   mcp.registerTool(
@@ -192,7 +192,7 @@ export function registerInterceptTools(mcp: McpServer) {
     },
     async ({ requestId, overrides }) => {
       const entry = getRequest(requestId)
-      if (!entry) return err(`unknown requestId: ${requestId}`)
+      if (!entry) return err(unknownRequestId(requestId))
       const target = getActiveTarget()
 
       // Collect cookies for the target URL

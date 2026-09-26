@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getRequest } from '../../traffic-store'
-import { ok, err } from '../utils'
+import { ok, err, unknownRequestId } from '../utils'
 
 interface Signal {
   name: string
@@ -84,7 +84,7 @@ export function registerAntibotTools(mcp: McpServer) {
     },
     async ({ requestId }) => {
       const entry = getRequest(requestId)
-      if (!entry) return err(`unknown requestId: ${requestId}`)
+      if (!entry) return err(unknownRequestId(requestId))
       if (!entry.responseBody || entry.responseBodyBase64)
         return err(`requestId ${requestId} has no text body to analyze`)
       const { signals, score } = analyze(entry.responseBody)

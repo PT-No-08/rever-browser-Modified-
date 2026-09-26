@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getActiveTarget } from '../../chrome-cdp'
 import { listRequests, getWsFrames, getRequest } from '../../traffic-store'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 const MAX_PAYLOAD_BYTES = 1024
 
@@ -72,7 +72,7 @@ export function registerWebSocketTools(mcp: McpServer) {
     async ({ requestId, since, limit }) => {
       // requestId 존재 여부 먼저 확인 — 없으면 명확한 에러 반환
       if (!getRequest(requestId)) {
-        return err(`unknown requestId: ${requestId} — use list_websockets to find valid IDs`)
+        return err(`${unknownRequestId(requestId)} — use list_websockets to find valid IDs`)
       }
       const frames = getWsFrames(requestId, since)
       const sliced = frames.slice(-(limit ?? 100))

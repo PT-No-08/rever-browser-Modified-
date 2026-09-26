@@ -122,7 +122,29 @@ export function getWebSocketCount(): number {
   return n
 }
 
-const MAX_ENTRIES = 500
+// 링 버퍼 용량. REVER_TRAFFIC_MAX_ENTRIES env로 조정 가능 (기본 500, 하한 50).
+// 장시간 스캔/탐색에서 초반 요청이 축출되면 get_request로 조회 불가 → DAST 엔진처럼
+// 스냅샷 폴백을 가진 소비자도 있는 만큼 용량 조정과 축출 관측을 함께 제공한다.
+const DEFAULT_MAX_ENTRIES = 500
+const MIN_MAX_ENTRIES = 50
+let maxEntries = resolveMaxEntries()
+
+function resolveMaxEntries(): number {
+  const raw = process.env.REVER_TRAFFIC_MAX_ENTRIES
+  if (raw == null || raw === '') return DEFAULT_MAX_ENTRIES
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return DEFAULT_MAX_ENTRIES
+  return Math.max(MIN_MAX_ENTRIES, n)
+}
+
+export function setTrafficMaxEntries(n: number): void {
+  maxEntries = Math.max(MIN_MAX_ENTRIES, Math.floor(n))
+  evictIfNeeded()
+}
+
+export function getTrafficMaxEntries(): number {
+  return maxEntries
+}
 // Per-body byte ceiling. 8MB sits above webcrack's 5MB deobfuscation limit, so
 // large JS bundles (the whole point of this tool) survive intact, while a
 // pathological multi-hundred-MB body can't blow up the ring buffer. Bodies past
@@ -143,8 +165,16 @@ const entries = new Map<string, StoredRequest>()
 // 현재 누적 바디 바이트 수 (UTF-16 코드 유닛 기준, JS string.length)
 let totalBodyBytes = 0
 
+// 프로세스 시작 이후 링 버퍼에서 축출된 엔트리 수. 조회 도구는 이 카운터를
+// 노출해 "조용한 데이터 유실"을 관측 가능하게 한다 (issue/12 참조).
+let totalEvicted = 0
+
+export function getEvictedCount(): number {
+  return totalEvicted
+}
+
 function evictIfNeeded() {
-  while (order.length > MAX_ENTRIES) {
+  while (order.length > maxEntries) {
     const oldest = order.shift()
     if (oldest) {
       const e = entries.get(oldest)
@@ -152,6 +182,7 @@ function evictIfNeeded() {
         totalBodyBytes = Math.max(0, totalBodyBytes - e.responseBody.length)
       }
       entries.delete(oldest)
+      totalEvicted++
       // Free any WebSocket frames keyed by this requestId — otherwise the
       // wsFrames map grows forever as requests churn through the ring buffer.
       wsFrames.delete(oldest)
@@ -289,4 +320,5 @@ export function clearTraffic() {
   wsFrames.clear()
   pendingExtraResponseHeaders.clear()
   totalBodyBytes = 0
+  totalEvicted = 0
 }

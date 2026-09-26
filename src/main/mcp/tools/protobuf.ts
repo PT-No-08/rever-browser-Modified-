@@ -4,12 +4,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getRequest } from '../../traffic-store'
 import { decodeProtobuf } from '../protobuf-decode'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 /** Response body first, request body as fallback — gRPC calls carry both. */
 function bytesForRequest(requestId: string): Buffer | string {
   const entry = getRequest(requestId)
-  if (!entry) return `unknown requestId: ${requestId}`
+  if (!entry) return unknownRequestId(requestId)
   if (entry.responseBody) {
     return entry.responseBodyBase64
       ? Buffer.from(entry.responseBody, 'base64')

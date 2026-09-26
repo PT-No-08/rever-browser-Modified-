@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { TraceMap, originalPositionFor, sourceContentFor } from '@jridgewell/trace-mapping'
 
 import { getRequest } from '../../traffic-store'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 // Module-level source map cache
 const traceMapCache = new Map<string, TraceMap>()
@@ -28,7 +28,7 @@ async function loadSourceMap(scriptRequestId: string): Promise<TraceMap | { erro
   if (cached) return cached
 
   const entry = getRequest(scriptRequestId)
-  if (!entry) return { error: `unknown requestId: ${scriptRequestId}` }
+  if (!entry) return { error: unknownRequestId(scriptRequestId) }
   if (!entry.responseBody) return { error: `no response body for ${scriptRequestId}` }
   if (entry.responseBodyBase64) return { error: `body is base64 (binary) for ${scriptRequestId}` }
 

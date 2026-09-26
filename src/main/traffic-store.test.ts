@@ -13,7 +13,10 @@ import {
   appendException,
   getExceptions,
   mergeExtraResponseHeaders,
-  takePendingExtraResponseHeaders
+  takePendingExtraResponseHeaders,
+  setTrafficMaxEntries,
+  getTrafficMaxEntries,
+  getEvictedCount
 } from './traffic-store'
 
 beforeEach(() => {
@@ -240,5 +243,40 @@ describe('responseReceivedExtraInfo merge (Set-Cookie capture)', () => {
 
   it('returns undefined for requests with no buffered extra info', () => {
     expect(takePendingExtraResponseHeaders('nope')).toBeUndefined()
+  })
+})
+
+describe('ring buffer capacity + eviction observability', () => {
+  it('evicts oldest entries beyond maxEntries and counts them', () => {
+    setTrafficMaxEntries(60)
+    for (let i = 0; i < 70; i++) {
+      upsertRequest({ requestId: `r${i}`, url: `https://a.com/${i}`, host: 'a.com' })
+    }
+    expect(getEvictedCount()).toBe(10)
+    expect(getRequest('r0')).toBeUndefined()
+    expect(getRequest('r69')).toBeDefined()
+    expect(listRequests({ limit: 100 })).toHaveLength(60)
+    setTrafficMaxEntries(500)
+  })
+
+  it('setTrafficMaxEntries clamps to the minimum and evicts immediately', () => {
+    for (let i = 0; i < 60; i++) {
+      upsertRequest({ requestId: `s${i}`, url: `https://a.com/${i}`, host: 'a.com' })
+    }
+    setTrafficMaxEntries(10) // below MIN_MAX_ENTRIES=50 → clamps to 50
+    expect(getTrafficMaxEntries()).toBe(50)
+    expect(listRequests({ limit: 100 })).toHaveLength(50)
+    expect(getEvictedCount()).toBe(10)
+    setTrafficMaxEntries(500)
+  })
+
+  it('clearTraffic resets the eviction counter', () => {
+    setTrafficMaxEntries(60)
+    for (let i = 0; i < 70; i++) {
+      upsertRequest({ requestId: `t${i}`, url: `https://a.com/${i}`, host: 'a.com' })
+    }
+    clearTraffic()
+    expect(getEvictedCount()).toBe(0)
+    setTrafficMaxEntries(500)
   })
 })

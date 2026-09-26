@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getActiveTarget } from '../../chrome-cdp'
 import { getRequest } from '../../traffic-store'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 const MAX_BYTES = 8 * 1024 * 1024
 
@@ -33,7 +33,7 @@ export function registerBodyTools(mcp: McpServer) {
     },
     async ({ requestId }) => {
       const entry = getRequest(requestId)
-      if (!entry) return err(`unknown requestId: ${requestId}`)
+      if (!entry) return err(unknownRequestId(requestId))
       if (entry.responseBody) {
         return ok(
           JSON.stringify({

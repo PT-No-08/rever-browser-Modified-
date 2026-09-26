@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getRequest, listRequests } from '../../traffic-store'
 import { diffRequests, computeApiBase, type Change } from '../request-diff'
-import { ok, err } from '../utils'
+import { ok, err, unknownRequestId } from '../utils'
 
 export function registerDiffTools(mcp: McpServer) {
   mcp.registerTool(
@@ -20,8 +20,8 @@ export function registerDiffTools(mcp: McpServer) {
     async ({ a, b }) => {
       const reqA = getRequest(a)
       const reqB = getRequest(b)
-      if (!reqA) return err(`unknown requestId: ${a}`)
-      if (!reqB) return err(`unknown requestId: ${b}`)
+      if (!reqA) return err(unknownRequestId(a))
+      if (!reqB) return err(unknownRequestId(b))
 
       const changes: Change[] = diffRequests(reqA, reqB)
 

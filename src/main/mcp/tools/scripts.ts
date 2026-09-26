@@ -12,7 +12,7 @@ import {
   runWebcrack,
   type Category
 } from '../script-analysis'
-import { ok, err, errorMessage } from '../utils'
+import { ok, err, errorMessage, unknownRequestId } from '../utils'
 
 const CATEGORIES = [
   'api',
@@ -30,7 +30,7 @@ const CATEGORIES = [
 
 function getScriptBody(requestId: string): { body: string } | { error: string } {
   const entry = getRequest(requestId)
-  if (!entry) return { error: `unknown requestId: ${requestId}` }
+  if (!entry) return { error: unknownRequestId(requestId) }
   if (!entry.responseBody)
     return { error: `requestId ${requestId} has no captured body (still loading or skipped)` }
   if (entry.responseBodyBase64)
