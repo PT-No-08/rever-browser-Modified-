@@ -11,7 +11,9 @@ import {
   getConsoleSince,
   clearConsole,
   appendException,
-  getExceptions
+  getExceptions,
+  mergeExtraResponseHeaders,
+  takePendingExtraResponseHeaders
 } from './traffic-store'
 
 beforeEach(() => {
@@ -195,5 +197,48 @@ describe('runtime exceptions', () => {
     // Cap is absolute regardless of prior appends in earlier tests.
     expect(all).toHaveLength(200)
     expect(all.at(-1)?.text).toBe('boom249')
+  })
+})
+
+describe('responseReceivedExtraInfo merge (Set-Cookie capture)', () => {
+  // CDP Network.responseReceived.response.headers omits Set-Cookie; the raw
+  // header block arrives in responseReceivedExtraInfo in either order.
+  const extra = {
+    'Content-Type': 'text/html',
+    'Set-Cookie': 'session=abc; HttpOnly\npref=dark; Secure'
+  }
+
+  it('merges when ExtraInfo arrives before responseReceived', () => {
+    upsertRequest({ requestId: 'r1', url: 'https://a.com/', host: 'a.com' })
+    mergeExtraResponseHeaders('r1', extra)
+    // responseReceived lands: caller merges pending extra headers under the
+    // event's own header map (same shape as chrome-cdp.ts / external-cdp.ts).
+    const pending = takePendingExtraResponseHeaders('r1')
+    upsertRequest({
+      requestId: 'r1',
+      status: 200,
+      responseHeaders: { ...pending, ...{ 'Content-Type': 'text/html', Server: 'x' } }
+    })
+    const h = getRequest('r1')?.responseHeaders ?? {}
+    expect(h['Set-Cookie']).toBe('session=abc; HttpOnly\npref=dark; Secure')
+    expect(h['Server']).toBe('x')
+  })
+
+  it('merges when ExtraInfo arrives after responseReceived', () => {
+    upsertRequest({
+      requestId: 'r2',
+      url: 'https://a.com/',
+      host: 'a.com',
+      responseHeaders: { 'Content-Type': 'text/html' }
+    })
+    mergeExtraResponseHeaders('r2', extra)
+    const h = getRequest('r2')?.responseHeaders ?? {}
+    expect(h['Set-Cookie']).toBe('session=abc; HttpOnly\npref=dark; Secure')
+    expect(h['Content-Type']).toBe('text/html')
+    expect(takePendingExtraResponseHeaders('r2')).toBeUndefined()
+  })
+
+  it('returns undefined for requests with no buffered extra info', () => {
+    expect(takePendingExtraResponseHeaders('nope')).toBeUndefined()
   })
 })

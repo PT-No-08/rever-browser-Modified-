@@ -114,4 +114,11 @@ describe('har-build.toHeaders', () => {
     expect(toHeaders({ A: '1' })).toEqual([{ name: 'A', value: '1' }])
     expect(toHeaders(undefined)).toEqual([])
   })
+
+  it('splits CDP-folded repeated headers into separate HAR entries', () => {
+    expect(toHeaders({ 'Set-Cookie': 'a=1; HttpOnly\nb=2; Secure' })).toEqual([
+      { name: 'Set-Cookie', value: 'a=1; HttpOnly' },
+      { name: 'Set-Cookie', value: 'b=2; Secure' }
+    ])
+  })
 })

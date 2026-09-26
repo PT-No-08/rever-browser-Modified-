@@ -246,9 +246,47 @@ export function getRequest(requestId: string): StoredRequest | undefined {
   return entries.get(requestId)
 }
 
+// ── responseReceivedExtraInfo merge ─────────────────────────────────────────
+// Network.responseReceived.response.headers omits Set-Cookie (verified against
+// Chrome via CDP: the event's header map carries no Set-Cookie even when the
+// server sets one). Chromium delivers the complete raw header block in
+// Network.responseReceivedExtraInfo instead — the same event Puppeteer uses
+// for rawHeaders. Ordering of the two events is not guaranteed, so whichever
+// arrives first is buffered here and merged when the other lands.
+const pendingExtraResponseHeaders = new Map<string, Record<string, string>>()
+const MAX_PENDING_EXTRA_RESPONSE_HEADERS = 1000
+
+export function mergeExtraResponseHeaders(
+  requestId: string,
+  extraHeaders: Record<string, string>
+): void {
+  const existing = entries.get(requestId)
+  if (existing?.responseHeaders) {
+    // responseReceived already arrived — merge in place. The stored headers
+    // win for shared names; the extra info contributes the omitted ones
+    // (Set-Cookie, Chromium folds repeated cookies into one '\n'-joined value).
+    existing.responseHeaders = { ...extraHeaders, ...existing.responseHeaders }
+    return
+  }
+  if (pendingExtraResponseHeaders.size >= MAX_PENDING_EXTRA_RESPONSE_HEADERS) {
+    const oldest = pendingExtraResponseHeaders.keys().next().value
+    if (oldest !== undefined) pendingExtraResponseHeaders.delete(oldest)
+  }
+  pendingExtraResponseHeaders.set(requestId, extraHeaders)
+}
+
+export function takePendingExtraResponseHeaders(
+  requestId: string
+): Record<string, string> | undefined {
+  const extra = pendingExtraResponseHeaders.get(requestId)
+  if (extra) pendingExtraResponseHeaders.delete(requestId)
+  return extra
+}
+
 export function clearTraffic() {
   order.length = 0
   entries.clear()
   wsFrames.clear()
+  pendingExtraResponseHeaders.clear()
   totalBodyBytes = 0
 }

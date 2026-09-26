@@ -2,7 +2,7 @@ import CDP from 'chrome-remote-interface'
 import type { WebContents } from 'electron'
 
 import { VISUALIZER_INIT_SCRIPT } from './mcp/visualizer'
-import { getRequest, upsertRequest, appendWsFrame, appendConsole, appendException } from './traffic-store'
+import { getRequest, upsertRequest, appendWsFrame, appendConsole, appendException, mergeExtraResponseHeaders, takePendingExtraResponseHeaders } from './traffic-store'
 
 export interface ScreencastFrameMeta {
   offsetTop: number
@@ -85,6 +85,13 @@ interface ResponseReceivedParams {
   timestamp: number
 }
 
+interface ResponseReceivedExtraInfoParams {
+  requestId: string
+  statusCode: number
+  headers: Record<string, string>
+  headersText?: string
+}
+
 interface LoadingFinishedParams {
   requestId: string
   encodedDataLength: number
@@ -156,6 +163,7 @@ export async function attachExternalCdp(port: number, sink: WebContents): Promis
     Network: Record<string, (params?: unknown) => Promise<unknown>> & {
       requestWillBeSent: (fn: (p: RequestWillBeSentParams) => void) => void
       responseReceived: (fn: (p: ResponseReceivedParams) => void) => void
+      responseReceivedExtraInfo: (fn: (p: ResponseReceivedExtraInfoParams) => void) => void
       loadingFailed: (fn: (p: { requestId: string }) => void) => void
       loadingFinished: (fn: (p: LoadingFinishedParams) => void) => void
       webSocketCreated: (fn: (p: WebSocketCreatedParams) => void) => void
@@ -225,7 +233,12 @@ export async function attachExternalCdp(port: number, sink: WebContents): Promis
       requestId: p.requestId,
       status: p.response.status,
       mimeType: p.response.mimeType,
-      responseHeaders: p.response.headers
+      // responseReceived headers omit Set-Cookie — merge the raw header block
+      // buffered from responseReceivedExtraInfo (which may arrive first).
+      responseHeaders: {
+        ...takePendingExtraResponseHeaders(p.requestId),
+        ...p.response.headers
+      }
     })
     if (!sink.isDestroyed()) {
       sink.send('network-event', {
@@ -236,6 +249,10 @@ export async function attachExternalCdp(port: number, sink: WebContents): Promis
         timestamp: p.timestamp
       })
     }
+  })
+
+  Network.responseReceivedExtraInfo((p) => {
+    mergeExtraResponseHeaders(p.requestId, p.headers)
   })
 
   Network.loadingFailed((_p) => {
