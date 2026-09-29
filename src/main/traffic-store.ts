@@ -138,6 +138,9 @@ function resolveMaxEntries(): number {
 }
 
 export function setTrafficMaxEntries(n: number): void {
+  // NaN/±Infinity는 Math.max를 통과하면서 maxEntries를 비유한값으로 오염시킨다
+  // (NaN이면 order.length > NaN이 항상 false라 축출이 완전히 멈춘다) — 거부한다.
+  if (!Number.isFinite(n)) return
   maxEntries = Math.max(MIN_MAX_ENTRIES, Math.floor(n))
   evictIfNeeded()
 }

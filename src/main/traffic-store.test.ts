@@ -280,3 +280,18 @@ describe('ring buffer capacity + eviction observability', () => {
     setTrafficMaxEntries(500)
   })
 })
+
+describe('setTrafficMaxEntries non-finite guard', () => {
+  it('rejects NaN/Infinity — a poisoned cap would disable eviction entirely', () => {
+    setTrafficMaxEntries(NaN)
+    expect(getTrafficMaxEntries()).toBe(500)
+    setTrafficMaxEntries(Infinity)
+    expect(getTrafficMaxEntries()).toBe(500)
+    // 축출이 여전히 작동하는지 확인
+    setTrafficMaxEntries(50)
+    for (let i = 0; i < 60; i++) {
+      upsertRequest({ requestId: `nf${i}`, url: `https://a.com/${i}`, host: 'a.com' })
+    }
+    expect(getEvictedCount()).toBe(10)
+  })
+})
