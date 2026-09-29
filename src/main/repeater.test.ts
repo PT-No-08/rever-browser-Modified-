@@ -40,7 +40,7 @@ describe('storedSpec', () => {
 describe('applyModifications', () => {
   const spec = {
     url: 'https://a.com/p', method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer t' },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer t' } as Record<string, string>,
     body: 'orig'
   }
 
