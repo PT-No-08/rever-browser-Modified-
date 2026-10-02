@@ -2,7 +2,13 @@ import { z } from 'zod'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-import { getRequest, listRequests, type StoredRequest } from '../../traffic-store'
+import {
+  getRequest,
+  listRequests,
+  setTrafficMaxEntries,
+  getTrafficMaxEntries,
+  type StoredRequest
+} from '../../traffic-store'
 import { ok, err, unknownRequestId } from '../utils'
 
 function toSummary(e: StoredRequest) {
@@ -20,6 +26,21 @@ function toSummary(e: StoredRequest) {
 }
 
 export function registerTrafficTools(mcp: McpServer) {
+  mcp.registerTool(
+    'traffic_set_max',
+    {
+      description:
+        'Resize the traffic-store ring buffer for the rest of this session. Raise it before a long scan so early requests are not evicted (REVER_TRAFFIC_MAX_ENTRIES is the startup-env equivalent). Returns the applied capacity.',
+      inputSchema: {
+        max_entries: z.number().int().positive().describe('New ring capacity (lower bound 50)')
+      }
+    },
+    async ({ max_entries }) => {
+      setTrafficMaxEntries(max_entries)
+      return ok(`traffic max entries = ${getTrafficMaxEntries()}`)
+    }
+  )
+
   mcp.registerTool(
     'list_requests',
     {
